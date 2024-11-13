@@ -41,8 +41,6 @@ ALTER TABLE old_table_name RENAME TO new_table_name;
 ```
 
 
-
-
 # 2. 操作数据库
     GORM操作数据库
 
@@ -104,8 +102,41 @@ result := db.Create(users)
 
 ```
 
-## 2.2. Select()
-    指定查询某些字段
+## 2.2. CreateInBatches()
+    批量插入
+### 2.2.1. 使用案例
+```cgo
+// 官方举例
+var users = []User{{Name: "jinzhu_1"}, ...., {Name: "jinzhu_10000"}}
+// 100 指的是 每一批插入的数据 
+// 如果 users 里有 101 条记录，首先会处理前 100 条记录作为第一批进行插入。然后剩下的 1 条记录会作为下一批（第二批）进行插入。
+db.CreateInBatches(users, 100)
+```
+```cgo
+// 项目代码
+// 将数据批量存入con 确认数据没有报错后再将数据批量存入数据库
+	con := make([]*tables.Sms, 0)
+	now := time.Now().Unix()
+	for i, phone := range input.Phone {
+		temp, err = json.Marshal(input.Param[i])
+		if err != nil {
+			log.Println("BMS", err)
+			continue
+		}
+		keyword := &tables.Sms{
+			Mobile:       phone,              // 手机号
+			TemplateCode: input.TemplateCode, // 短信模板Code
+			Param:        string(temp),       // 短信模板参数
+			SendTime:     now,                // 短信发送时间
+			Status:       1,
+			BizID:        *rsp.Body.BizId,
+		}
+		con = append(con, keyword)
+	}
+	if len(con) > 0 {
+		database.DB.CreateInBatches(con, 1000)
+	}
+```
 
 ## 2.3. Pluck()
     指定查询某个字段
