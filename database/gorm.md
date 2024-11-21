@@ -1,4 +1,4 @@
-# 1. update.sql文件
+# 1. CRUD 基础介绍
     用于存储数据库的更新信息
 
 ## 1.1. 创建表
@@ -41,7 +41,7 @@ ALTER TABLE old_table_name RENAME TO new_table_name;
 ```
 
 
-# 2. 操作数据库
+# 2. 常用方法
     GORM操作数据库
 
 ## 2.1. Create()
@@ -138,6 +138,228 @@ db.CreateInBatches(users, 100)
 	}
 ```
 
-## 2.3. Pluck()
-    指定查询某个字段
+## 2.3. First()
+    获取第一条记录(主键升序)
+### 2.3.1. 使用案例
+```cgo
+// 官方举例
+// 获取第一条记录（主键升序）
+db.First(&user)
+// SELECT * FROM users ORDER BY id LIMIT 1;
+```
+```cgo
+// 项目代码
+type row struct {
+    tables.PointUser
+    Goods struct {
+        Name []string //返回可以兑换的积分商品名称 前端随机展示其中一个
+    } `gorm:"-"`
+    Expired struct {
+        Num uint32 //返回可以兑换的积分商品名称 前端随机展示其中一个
+    } `gorm:"-"`
+}
+ori := new(row) // new 函数来创建变量时，它返回的就是一个指针
+database.DB.Where("user_id = ?", userID).First(ori) // 此处因为 ori本身已经是个指针了所以就不再需要"&"了
+```
     
+
+## 2.4. Take()
+    随机获取一条记录，没有指定排序字段
+
+### 2.4.1. 使用案例
+```cgo
+// 官方举例
+// 获取一条记录，没有指定排序字段
+db.Take(&user)
+// SELECT * FROM users LIMIT 1;
+```
+```cgo
+// 项目代码
+ori := new(tables.CateTag)
+database.DB.Where("id = ?", input.ID).Take(ori) // 随机获取匹配条件的一条记录。
+
+id = 0
+database.DB.Table(table).Where("`type`=?", input.Type).Select("id").Take(&id)
+// Take 方法需要能够直接修改传递的变量来存储查询到的结果值。
+// 使用指针 &id 可以确保查询得到的值能够正确地被赋值给 id 变量
+// 如果不使用指针，id 变量的值不会被 Take 方法更新，导致判断结果不准确。
+```
+### 2.4.2. Take() 和 Find() 的区别
+- 行为：         
+Find() 用于查询匹配条件的所有记录，并将结果填充到给定的切片中。             
+Take() 用于获取匹配条件的第一条记录。           
+
+- 返回结果：        
+Find() 返回匹配条件的一个记录切片。           
+Take() 返回单个匹配的记录。
+
+- 错误处理：           
+如果没有找到匹配的记录，Find() 不会返回错误，只是返回一个空切片。            
+Take() 如果没有找到匹配的记录，会返回一个错误。
+
+总的来说，如果您只关心匹配条件的第一条记录，使用 Take() ；如果您想要获取所有匹配的记录，使用 Find() 。
+
+    以上是网上查找到的解释 我这边总结来说的话呢 Find找到的是个数组对象：[{aa:11},{bb:22}]、Take找到的是个对象：{aa:11}
+
+## 2.5. Last()
+    获取最后一条记录（主键降序）
+### 2.5.1. 使用案例
+````cgo
+// 官方举例
+// 获取最后一条记录（主键降序）
+db.Last(&user)
+// SELECT * FROM users ORDER BY id DESC LIMIT 1
+````
+
+## 2.6. Update()
+    用于更新单个字段的值。它需要指定要更新的字段和新的值
+### 2.6.1. 使用案例
+````cgo
+// 举例
+db.Model(&user).Update("name", "new_name")
+````
+```cgo
+// 项目中案例 仅仅更新 mid
+database.DB.Table(table).Where("id=?", oa.ID).Update("mid", oa.Mid) 
+```
+
+## 2.7. Updates()
+    用于批量更新多个字段的值。它接受一个结构体或映射作为参数，其中包含要更新的字段和新的值。
+### 2.7.1. 使用案例
+````cgo
+// 举例
+db.Model(&user).Updates(User{Name: "new_name", Age: 20})
+````
+```cgo
+// 项目中案例 更新表中的数据大于一个
+up := struct {
+    Status uint8  // 录制状态
+    File   string // 录制视频的入口文件
+}{123, "123456"}
+tx := database.DB.Table(aa).Where("aaas=?", ss[0]).Updates(up)
+```
+
+## 2.8. Save()
+    如果记录存在则更新，不存在则创建。它会根据主键的值来判断是更新还是创建。如果主键有值且在数据库中存在对应的记录，就执行更新操作；如果主键为空或者在数据库中没有对应的记录，就执行插入操作。
+### 2.8.1. 使用案例
+```cgo
+// 项目中 好像很少用到 就用了一个ai的举例
+row := new(tables.GroupCount)
+database.DB.Table(tables.T_GroupCount).Where("group_id =? and date =?", v.RoomId, date).Take(&row)
+
+newData := row
+if row.ID == 0 {
+    // 准备新增数据
+    newData.GroupID = v.RoomId;
+    newData.Date = date;
+    newData.Count = 1;
+} else {
+    // 更新
+    newData.Count++
+}
+database.DB.Save(&newData)
+```
+
+# 3. 构建、执行相关方法
+    用于构建和执行复杂的数据库查询操作。
+
+## 3.1. Where()
+    用于添加查询条件到数据库操作中。可以接受不同类型的参数来构建查询条件。
+### 3.1.2. 使用案例
+```cgo
+// 查找 name 字段等于 jinzhu 的用户
+db.Where("name =?", "jinzhu").Find(&users)
+
+// 根据结构体中的字段值构建条件
+db.Where(&User{Name: "jinzhu", Age: 20}).Find(&users)
+
+// 查找 name 字段值为 "jinzhu" 且 age 字段值为 20 的用户记录
+db.Where(map[string]interface{}{"name": "jinzhu", "age": 20}).Find(&users)
+```
+```cgo
+// 项目中使用的常常用字符串作为条件
+user := new(tables.User)
+database.DB.Where("mobile = ?", input.Mobile).Take(&user)
+user.Name = input.Name // 此处将要修改 user 所以上面用到了指针 &user
+
+tem := new(SmsTemplate)
+database.DB.Where("id = ?", s.TemplateId).Take(tem)
+num := tem.ParamsCount() // 此处仅仅是获取了tem 并没有对其进行修改 所以不必用指针
+```
+
+## 3.2. Select()
+    从数据库中选择的字段
+### 3.2.1. 使用案例
+```cgo
+// 从数据库中选择 name 和 age 字段，并将结果填充到 users 切片中
+db.Select("name, age").Find(&users) 
+
+// 计算记录的总数，并将结果命名为 total
+db.Select("COUNT(*) as total").Find(&result)
+
+// 从 User 表中选择 name 字段，从 Order 表中选择 order_number 字段
+db.Model(&User{}).
+    Select("users.name, orders.order_number").
+    Joins("JOIN orders ON users.id = orders.user_id").
+    Find(&results)
+```
+```cgo
+// 项目中的用法
+id = 0
+database.DB.Table(table).Where("`type`=?", input.Type).Select("id").Take(&id)
+// Take 方法需要能够直接修改传递的变量来存储查询到的结果值。使用指针 &id 可以确保查询得到的值能够正确地被赋值给 id 变量
+```
+
+## 3.3. Joins()
+    用于在查询中添加关联条件，以连接多个表获取相关数据。      
+    Joins 方法接受一个字符串参数，用于指定关联的表和关联条件。您可以使用标准的 SQL 风格的关联语法来编写这个字符串。
+
+- JOIN 意味着只返回在连接条件下两个表中相互匹配的行  
+- LEFT JOIN 则会返回左表（即写在 LEFT JOIN 左边的表）中的所有行，即使在右表中没有匹配的行
+### 3.3.1. 使用案例
+```cgo
+// 项目中的用法
+
+// left join 在这段代码中，uids 切片将会存储从数据库查询中获取的 user_id 字段的值。
+uids := make([]uint, 0)
+database.DB.Table(tables.T_Doctor+" as d").
+    Joins("left join "+tables.T_User+" as u on d.user_id=u.id"). 
+    Where("u.name = ? and d.hospital_id=?", i.DoctorName, hos).
+    Select("user_id"). // 指定只选择 user_id 字段
+    Limit(2). // 用于限制查询结果返回的行数为 2 行。也就是说，无论数据库中实际有多少匹配的记录，此查询只会返回最多 2 条记录。
+    Find(&uids) // 将结果填充到 uids 切片中
+    
+// join 从数据库中查询并统计相关数据，按照特定条件进行连接、分组和字段选择，最终将结果存储在 con 切片中。
+con := make([]count, 0)
+database.DB.Table(tables.T_ResidentContract + " as ctr").
+    Joins("join " + doctor + " as doc on ctr.doctor_id = doc.user_id").
+    Group("doc.hospital_id"). // 按照 doc.hospital_id 字段对结果进行分组
+    Select("doc.hospital_id as id, count(ctr.doctor_id) as cot"). // 选择要返回的字段，将 doc.hospital_id 重命名为 id ，并计算 ctr.doctor_id 的数量并重命名为 cot
+    Find(&con)
+```
+
+## 3.4. Preload()
+    在查询主模型数据的同时，预先加载关联的模型数据。
+    Preload 方法可以接受一个字符串参数来指定要预加载的关联关系名称。
+### 3.4.1. 使用案例
+```cgo
+// 项目中使用案例 
+// 在查询主数据时，预先加载关联的 Doctor 数据
+type row struct {
+    tables.LiveDoctor
+    Doctor struct {
+        UserID           uint   `json:"-"` // 标签中出现 json:"-" 时，表示在将该结构体序列化为 JSON 时，这个字段将被忽略，不会出现在生成的 JSON 数据中
+        HospitalProvince uint16 // 医院所在省份ID
+        Name             string // 医生名
+        Hospital         string // 医院名称
+        Department       string // 部门名称
+        Title            string // 职称: 主任医师
+        Certificate      string // 证书图片地址
+    } `gorm:"foreignKey:UserID;references:UserID"` // foreignKey:UserID 表示当前模型中的 UserID 字段是外键。references:UserID 表示这个外键引用的是另一个表（通常是 User 表）中的 UserID 字段。通过这种方式，GORM 能够理解表之间的关联关系，并在进行数据库操作（如查询关联数据、级联删除等）时正确处理这些关系
+}
+tx := database.DB.Preload("Doctor", func(db *gorm.DB) *gorm.DB {
+    return db.Table(tables.T_HealthDoctor).Select("user_id,hospital_province,name,hospital,department,title,certificates")
+}).Order("user_id desc")
+```
+
+

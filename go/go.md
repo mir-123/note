@@ -186,3 +186,50 @@
 		Reason:  &v.AuditReason,
 	}
 ```
+
+# 3. int 转 uint 数据出错
+    int 首位表示正负 当为负值时 转换成uint 出现数据不正确的错误 
+```cgo
+// 代码示例
+func getDeadlyPoints(userID uint, nowPoint uint32, expireTime int64) uint32 {
+	// 获取过期时间(前年年初)
+	res := struct {
+		Point uint32 // 这两年挣的积分
+	}{}
+	
+	// ... 次数省略其他的代码
+	
+	// 即将过期的积分 = 当前积分 - 这两年挣的积分
+	// DeadlyPoints := int(nowPoint - res.Point) 这样改是不对的 需要将两个数据分别int之后相减
+	DeadlyPoints := int(nowPoint) - int(res.Point)
+	if DeadlyPoints < 0 {
+		DeadlyPoints = 0
+	}
+	return uint32(DeadlyPoints) // 最后得到的数据 确保是 正数 在进行uint
+}
+```
+
+# 4. 为什么时间戳要用 int64 
+
+- 范围足够大：int64 能够表示的数值范围足够涵盖大多数常见的时间戳范围，从 1970 年 1 月 1 日（Unix 纪元）到很久的未来。
+- 精度和准确性：可以准确表示到微秒甚至纳秒级别的时间精度，满足大多数应用对时间精度的要求。
+- 跨平台一致性：int64 在不同的操作系统和硬件架构上具有一致的行为和表示，使得代码在不同环境中的行为更可预测。
+- 方便计算和比较：整数类型在进行时间的计算（如时间差）和比较操作时通常更直观和高效。
+- 与数据库和网络通信的兼容性：许多数据库和网络协议也常使用 64 位整数来表示时间戳，方便数据的存储、传输和转换。
+
+# 5. get接口 数组参数类型
+
+```cgo
+// 举例：可以批量选择Tag
+
+// 可以接受 Tag[]:1,Tag[]:2 这样的数据
+input := struct {
+    Tag   []uint `form:"Tag[]"`
+}{}
+
+// 如果参数中Tag的长度 大于0 将在数据库中 查找 tag.id 在 input.Tag 数组中的 数据
+if len(input.Tag) > 0 {
+    tx.Where("tag.id IN (?)", input.Tag)
+}
+
+```
