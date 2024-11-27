@@ -1,9 +1,6 @@
-3. defred不知道
-4. config不知道 
-5. env 不知道
 7. 用helper文件里已经有的方法
-9. 对称加密
-10. MD5
+8. 得知道写的代码是啥意思  为啥要写 不写会咋样
+9. 每个方法其实都可以看到结果的
 
 6. `gorm:"-" json:"Expired,omitempty"`
 
