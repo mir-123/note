@@ -169,6 +169,29 @@
     b = int16(a)  // 可以这样
 ```
 
+## 1.5. nil
+    nil并不等同于其他语言的null，nil仅仅只是一些类型的零值，并且不属于任何类型
+```cgo
+// 各种数据类型的零值
+// 数字: 0
+// 布尔: false
+// 字符: ""
+// 数组:	固定长度的对应类型的零值集合 [0,0,0,0]、["", "", "", ""]
+// 结构体: 内部字段都是零值的结构体
+// 切片，映射表，函数，接口，通道，指针: nil
+
+// nil对应的各种数据
+// nil  : 指针类型，例如 *int、*string 等。 
+// nil  : 切片类型，例如 []int、[]string 等。
+// nil  : 映射类型，例如 map[string]int 。
+// nil  : 函数类型。
+// nil  : 接口类型。
+// 0    : int。
+// 0.0  : float64。
+// false: bool。
+// ""   : string。
+```
+
 # 2. 指针
     Go语言中的指针不能进行偏移和运算，因此我们说Go语言的指针是只读的。
 
@@ -198,6 +221,57 @@
 
 ## 2.3. 为什么项目里要用到指针
     动态内存分配：使用 new 或 make 分配内存时，返回的是指针，通过指针来管理和操作动态分配的内存。
+
+## 2.4. 创建
+    关于指针有两个常用的操作符，一个是取地址符&，另一个是解引用符*。
+```cgo
+// 打印出来是地址
+func main() {
+   num := 2
+   p := &num
+   fmt.Println(p) // 0xc00001c088
+}
+
+// 解引用 打印出来是值
+func main() {
+	num := 2
+	p := &num
+	rawNum := *p
+	fmt.Println(rawNum) // 2
+}
+
+// p是一个指针，对指针类型解引用就能访问到指针所指向的元素
+func main() {
+   var numPtr *int // 只在此处声明了指针 将返回 指针对应的空值 nil
+   fmt.Println(numPtr) // <nil>
+}
+
+// 空指针，无法正常使用。要么使用取地址符将其他变量的地址赋值给该指针，要么就使用内置函数new手动分配
+func main() {
+   var numPtr *int // 声明了一个指向整数的指针 numPtr ，此时它的初始值为 nil 
+   numPtr = new(int) // 为 numPtr 分配了内存，并将其指向一个新的整数空间。
+   fmt.Println(numPtr) // 取到一个地址：0xc00008a050(上一步为其新分配的内存地址)
+   // 而这个新分配的整数空间被初始化为其类型的零值，对于 int 类型，零值是 0 。 所以，如果您想要获取这个指针指向的值，可以使用 *numPtr ，其值为 0 
+}
+
+// 短变量 和上面的代码实现的效果是一样的
+func main() {
+   numPtr := new(int)
+   fmt.Println(numPtr) // 0xc000200050
+}
+
+// new函数只有一个参数那就是类型，并返回一个对应类型的指针，函数会为该指针分配内存，并且指针指向对应类型的零值
+func main() {
+   fmt.Println(*new(string)) // 
+   fmt.Println(*new(int)) // 0
+   fmt.Println(*new([5]int)) // [0, 0, 0, 0, 0]
+   fmt.Println(*new([]float64)) // []
+}
+```
+
+## 2.5. 禁止指针运算
+https://golang.halfiisland.com/essential/base/67.pointer.html#%E5%88%9B%E5%BB%BA
+
 
 # 3. 类型转换
 
@@ -458,6 +532,9 @@ r.Run(":" + strconv.Itoa(config.Config.Swipe.Port))
   2. 密钥长度较长：导致计算和存储成本增加。
 
 # 10. 映射
+>map 本身的设计目标是在单线程或低并发场景下提供高效的键值对存储和访问操作。它的这种特性使得在常见的非并发场景中能够具有出色的性能和简洁的使用方式。
+> 
+>在高并发场景下，如果不正确地使用 map 导致了并发读写冲突和错误，这更多地是使用者没有根据场景选择合适的数据结构和并发控制方式，而不是 map 本身的缺陷。
 
 ## 10.1. 初始化
     有两种初始化的方法
@@ -628,23 +705,30 @@ func main() {
 ```cgo
 func main() {
 
-   group.Add(10)
-   // map
+   group.Add(10) // 表示十个并发任务
+   
+   // 创建一个初始容量为 10 的字符串键、整数值的 map
    mp := make(map[string]int, 10)
+   
    for i := 0; i < 10; i++ {
+   // 启动一个循环，创建 10 个并发任务
       go func() {
          // 写操作
          for i := 0; i < 100; i++ {
+            // 多次向 map 中写入相同的键值对，可能导致并发冲突
             mp["helloworld"] = 1
          }
          // 读操作
          for i := 0; i < 10; i++ {
+            // 多次从 map 中读取相同的键对应的值，可能导致并发冲突
             fmt.Println(mp["helloworld"])
          }
+         // 通知 WaitGroup 这个并发任务已完成
          group.Done()
       }()
    }
+   // 阻塞等待之前添加的 10 个任务全部完成（即 10 次 group.Done() 被调用）
    group.Wait()
 }
-// 上面这一段代码没看懂其实
+fatal error: concurrent map writes
 ```
