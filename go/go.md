@@ -456,3 +456,195 @@ r.Run(":" + strconv.Itoa(config.Config.Swipe.Port))
 - 缺点：
   1. 计算开销大：加密和解密的速度通常比对称加密慢得多，不适合处理大量数据的实时加密。
   2. 密钥长度较长：导致计算和存储成本增加。
+
+# 10. 映射
+
+## 10.1. 初始化
+    有两种初始化的方法
+```cgo
+// 第一种：字面量 map[keyType]valueType{}
+mp := map[int]string{
+   0: "a",
+   1: "a",
+   2: "a",
+   3: "a",
+   4: "a",
+}
+mp := map[string]int{
+   "a": 0,
+   "b": 22,
+   "c": 33,
+}
+
+// 第二种：内置函数make，对于map而言，接收两个参数，分别是类型与初始容量
+mp := make(map[string]int, 8)
+mp := make(map[string][]int, 10)
+mapTemp := make(map[string]bool) // 可以用来去重
+
+```
+
+## 10.2. 访问
+    访问一个map的方式就像通过索引访问一个数组一样。
+```cgo
+func main() {
+	mp := map[string]int{
+		"a": 0,
+		"b": 1,
+		"c": 2,
+		"d": 3,
+	}
+	fmt.Println(mp["a"]) // 0
+	fmt.Println(mp["b"]) // 1
+	fmt.Println(mp["d"]) // 3
+	fmt.Println(mp["f"]) // 0 即使map中不存在"f"这一键值对，但依旧有返回值
+	
+	// 在访问map的时候其实有两个返回值，第一个返回值对应类型的值，第二个返回值一个布尔值，代表键是否存在
+	if val, exist := mp["f"]; exist {
+      fmt.Println(val)
+   } else {
+      fmt.Println("key不存在")
+   }
+} 
+```
+
+## 10.3. 存值
+    map存值的方式也类似数组存值一样已存在的键会覆盖原有的值
+```cgo
+// 一般情况下是这样的
+func main() {
+   mp := make(map[string]int, 10)
+   mp["a"] = 1
+   mp["b"] = 2
+   if _, exist := mp["b"]; exist {
+      mp["b"] = 3
+   }
+   fmt.Println(mp)
+}
+
+// 但是也存在特殊情况 特殊情况下键为math.NaN()
+func main() {
+	mp := make(map[float64]string, 10)
+	mp[math.NaN()] = "a"
+	mp[math.NaN()] = "b"
+	mp[math.NaN()] = "c"
+	_, exist := mp[math.NaN()]
+	fmt.Println(exist) // false
+	fmt.Println(mp) // map[NaN:c NaN:a NaN:b]
+}
+// 针对上述情况官方给出的解释是：因为NaN是IEE754标准所定义的，其实现是由底层的汇编指令UCOMISD完成，这是一个无序比较双精度浮点数的指令，该指令会考虑到NaN的情况，因此结果就是任何数字都不等于NaN，NaN也不等于自身，这也造成了每次哈希值都不相同。关于这一点社区也曾激烈讨论过，但是官方认为没有必要去修改，所以应当尽量避免使用NaN作为map的键。
+```
+
+## 10.4. 删除
+    删除一个键值对需要用到内置函数delete
+```cgo
+func main() {
+   mp := map[string]int{
+      "a": 0,
+      "b": 1,
+      "c": 2,
+      "d": 3,
+   }
+   fmt.Println(mp) // map[a:0 b:1 c:2 d:3]
+   delete(mp, "a")
+   fmt.Println(mp) // map[b:1 c:2 d:3]
+}
+
+// 需要注意的是，如果值为NaN，甚至没法删除该键值对。
+func main() {
+   mp := make(map[float64]string, 10)
+   mp[math.NaN()] = "a"
+   mp[math.NaN()] = "b"
+   mp[math.NaN()] = "c"
+   fmt.Println(mp) // map[NaN:c NaN:a NaN:b]
+   delete(mp, math.NaN())
+   fmt.Println(mp) // map[NaN:c NaN:a NaN:b]
+}
+```
+
+## 10.5. 遍历
+    通过for range可以遍历map
+```cgo
+func main() {
+   mp := map[string]int{
+      "a": 0,
+      "b": 1,
+      "c": 2,
+      "d": 3,
+   }
+   for key, val := range mp {
+      fmt.Println(key, val)
+   }
+}
+// 打印出来的数据是这样的：
+c 2
+d 3
+a 0
+b 1
+
+// 可以看到结果并不是有序的，也印证了map是无序存储。值得一提的是，NaN虽然没法正常获取，但是可以通过遍历访问到，例如
+func main() {
+   mp := make(map[float64]string, 10)
+   mp[math.NaN()] = "a"
+   mp[math.NaN()] = "b"
+   mp[math.NaN()] = "c"
+   for key, val := range mp {
+      fmt.Println(key, val)
+   }
+}
+// 打印出来的数据：
+NaN a
+NaN c
+NaN b
+```
+
+## 10.6. 清空
+    只需要一个clear就可以清空
+```cgo
+func main() {
+	m := map[string]int{
+		"a": 1,
+		"b": 2,
+	}
+	clear(m)
+	fmt.Println(m) // map[]
+}
+```
+
+## 10.7. set
+    Set是一种无序的，不包含重复元素的集合，Go中并没有提供类似的数据结构实现，但是map的键正是无序且不能重复的，所以也可以使用map来替代set。
+```cgo
+func main() {
+	set := make(map[int]struct{}, 10)
+	for i := 0; i < 10; i++ {
+		set[rand.Intn(100)] = struct{}{}
+	}
+	fmt.Println(set) // map[0:{} 18:{} 25:{} 40:{} 47:{} 56:{} 59:{} 81:{} 87:{}]
+}
+// 一个空的结构体不会占用内存
+```
+
+## 10.8. 注意
+    map并不是一个并发安全的数据结构，Go团队认为大多数情况下map的使用并不涉及高并发的场景，引入互斥锁会极大的降低性能，map内部有读写检测机制，如果冲突会触发fatal error
+```cgo
+func main() {
+
+   group.Add(10)
+   // map
+   mp := make(map[string]int, 10)
+   for i := 0; i < 10; i++ {
+      go func() {
+         // 写操作
+         for i := 0; i < 100; i++ {
+            mp["helloworld"] = 1
+         }
+         // 读操作
+         for i := 0; i < 10; i++ {
+            fmt.Println(mp["helloworld"])
+         }
+         group.Done()
+      }()
+   }
+   group.Wait()
+}
+// 上面这一段代码没看懂其实
+```
