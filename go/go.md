@@ -382,6 +382,33 @@ link.GET("/code", controllers.UserController{}.GiveCode)
 link.HEAD("/code", controllers.UserController{}.GiveCode)
 ```
 
+## 5.3. &http.Client.Get(url)
+    只有在 由于各种情况没有访问到地址的情况下 才会 err != nil   
+    其他情况只要能返回 状态码的 应该都是 err == nil 的情况    
+    注意：具体的还不太清楚 目前只测试出 一部分状况           
+```cgo    
+// 项目中的具体代码如下：
+client := &http.Client{
+    Timeout: 10 * time.Second,
+}
+// file.File: https://123456789.com
+resp, err := client.Get(file.File)
+if err != nil {
+    // 当网络连接异常、请求构建错误、HTTP 协议错误、请求超时或其他与请求执行相关的底层通信问题发生
+    log.Println("GCFB31", file.ID, err)
+    return
+}
+defer resp.Body.Close()
+
+if resp.StatusCode != 200 {
+    if resp.StatusCode == 404 {
+        return
+    }
+    log.Println("GCFB32", file.ID, "http:", resp)
+    return
+}
+```
+
 # 6. fmt和log
     两者都能将数据以某种形式展示出来。           
     在一些情况下，log 的性能可能略优于 fmt ，特别是在频繁的日志记录场景中。
@@ -731,4 +758,262 @@ func main() {
    group.Wait()
 }
 fatal error: concurrent map writes
+```
+
+# 11. 结构体
+    结构体可以存储一组不同类型的数据，是一种复合类型。
+    Go并非是一个传统OOP的语言，但是Go依旧有着OOP的影子，通过结构体和方法也可以模拟出一个类
+    OOP: 面向对象程序设计 Object Oriented Programming
+```cgo
+type Programmer struct {
+	Name     string
+	Age      int
+	Job      string
+	Language []string
+}
+```
+
+## 11.1. 声明
+    结构体本身以及其内部的字段都遵守大小写命名的暴露方式。对于一些类型相同的相邻字段，可以不需要重复声明类型
+```cgo
+// 字段名不能与方法名重复
+type Rectangle struct {
+	height, width, area int
+	color               string
+}
+```
+
+## 11.2. 实例化
+    Go不存在构造方法，大多数情况下采用如下的方式来实例化结构体。
+```cgo
+// 初始化的时候就像map一样指定字段名称再初始化字段值
+programmer := Programmer{
+   Name:     "jack",
+   Age:      19,
+   Job:      "coder",
+   Language: []string{"Go", "C++"},
+}
+
+// 可以省略字段名称，当省略字段名称时，就必须初始化所有字段，通常不建议使用这种方式，因为可读性很糟糕
+programmer := Programmer{
+   "jack",
+   19,
+   "coder",
+   []string{"Go", "C++"}
+ }
+ 
+// 如果实例化过程比较复杂，你也可以编写一个函数来实例化结构体，就像下面这样，你也可以把它理解为一个构造函数
+type Person struct {
+	Name    string
+	Age     int
+	Address string
+	Salary  float64
+}
+func NewPerson(name string, age int, address string, salary float64) *Person {
+	return &Person{
+        Name: name, 
+        Age: age, 
+        Address: address, 
+        Salary: salary
+	}
+}
+
+// Go并不支持函数与方法重载，所以你无法为同一个函数或方法定义不同的参数。如果你想以多种方式实例化结构体，要么创建多个构造函数，要么建议使用options模式。
+```
+
+### 11.2.1. 选项模式
+    选项模式是Go语言中一种很常见的设计模式，可以更为灵活的实例化结构体，拓展性强，并且不需要改变构造函数的函数签名
+```cgo
+// 不太懂...
+// 假设有下面这样一个结构体
+type Person struct {
+	Name     string
+	Age      int
+	Address  string
+	Salary   float64
+	Birthday string
+}
+
+// 声明一个PersonOptions类型，它接受一个*Person类型的参数，它必须是指针，因为我们要在闭包中对Person赋值。
+type PersonOptions func(p *Person) // todo 根据猜测 这种应该类似于 创建一个表 然后将表return
+
+// 接下来创建选项函数，它们一般是With开头，它们的返回值就是一个闭包函数。
+func WithName(name string) PersonOptions {
+	return func(p *Person) {
+		p.Name = name
+	}
+}
+
+func WithAge(age int) PersonOptions {
+	return func(p *Person) {
+		p.Age = age
+	}
+}
+
+func WithAddress(address string) PersonOptions {
+	return func(p *Person) {
+		p.Address = address
+	}
+}
+
+func WithSalary(salary float64) PersonOptions {
+	return func(p *Person) {
+		p.Salary = salary
+	}
+}
+
+// 实际声明的构造函数签名如下，它接受一个可变长 PersonOptions 类型的参数。
+func NewPerson(options ...PersonOptions) *Person {
+    // 优先应用options
+	p := &Person{}
+    for _, option := range options {
+        option(p)
+    }
+	
+	// 默认值处理
+	if p.Age < 0 {
+		p.Age = 0
+	}
+	
+    return p
+}
+
+// 这样一来对于不同实例化的需求只需要一个构造函数即可完成，只需要传入不同的Options函数即可
+func main() {
+	pl := NewPerson(
+		WithName("John Doe"),
+		WithAge(25),
+		WithAddress("123 Main St"),
+		WithSalary(10000.00),
+	)
+
+	p2 := NewPerson(
+		WithName("Mike jane"),
+		WithAge(30),
+	)
+}
+
+// 函数式选项模式在很多开源项目中都能看见，gRPC Server的实例化方式也是采用了该设计模式。函数式选项模式只适合于复杂的实例化，如果参数只有简单几个，建议还是用普通的构造函数来解决。
+```
+
+## 11.3. 组合
+    结构体之间的关系是通过组合来表示的，可以显式组合，也可以匿名组合，后者使用起来更类似于继承，但本质上没有任何变化
+```cgo
+// 显式组合的方式
+type Person struct {
+   name string
+   age  int
+}
+
+type Student struct { // 显试
+   p      Person
+   school string
+}
+type Student2 struct { // 隐试
+   Person
+   school string
+}
+
+type Employee struct {
+   p   Person
+   job string
+}
+
+// 在使用时需要显式的指定字段p
+student := Student{
+   p:      Person{name: "jack", age: 18},
+   school: "lili school",
+}
+
+// 在使用时需要显式的指定字段p
+student2 := Student2{
+   person:      Person{name: "jack", age: 18},
+   school: "lili school",
+}
+
+// 以下两个都是打印出"jack" 的
+fmt.Println(student2.p.name)
+fmt.Println(student2.name)
+```
+
+## 11.4. 指针
+    对于结构体指针而言，不需要解引用就可以直接访问结构体的内容
+```cgo
+// 在编译的时候会转换为(*p).name ，(*p).age，其实还是需要解引用，不过在编码的时候可以省去，算是一种语法糖。
+p := &Person{
+   name: "jack",
+   age:  18,
+}
+fmt.Println(p.age,p.name)
+```
+
+## 11.5. 标签
+    结构体标签是一种元编程的形式，结合反射可以做出很多奇妙的功能
+```cgo
+// 格式如下
+`key1:"val1" key2:"val2"`
+
+// 标签是一种键值对的形式，使用空格进行分隔。结构体标签的容错性很低，如果没能按照正确的格式书写结构体，那么将会导致无法正常读取，但是在编译时却不会有任何的报错，下方是一个使用示例。
+type Programmer struct {
+    Name     string `json:"name"`
+    Age      int `yaml:"age"`
+    Job      string `toml:"job"`
+    Language []string `properties:"language"`
+}
+// 结构体标签最广泛的应用就是在各种序列化格式中的别名定义，标签的使用需要结合反射才能完整发挥出其功能。
+// 反射是什么 不太清楚
+```
+
+## 11.6. 内存对齐
+    Go结构体字段的内存分布遵循内存对齐的规则，这么做可以减少CPU访问内存的次数，相应的占用的内存要多一些，属于空间换时间的一种手段。
+```cgo
+// 假设有如下结构体
+type Num struct {
+	A int64
+	B int32
+	C int16
+	D int8
+    E int32
+}
+// 已知这些类型的占用字节数
+int64 8个字节
+int32 4个字节
+int16 2个字节
+int8  1个字节
+
+// 整个结构体的内存占用似乎是8+4+2+1+4=19个字节吗
+// 当然不是这样，根据内存对齐规则而言，结构体的内存占用长度至少是最大字段的整数倍，不足的则补齐。
+// 因此实际上是占用24个字节，其中有5个字节是无用的。
+8个字节: A(int64)
+8个字节: B(int32) + C(int16) + D(int8) + 1个空字节
+8个字节: E(int32) + 4个空字节
+
+// 再来看下面这个结构体
+type Num struct {
+	A int8  1字节
+	B int64 8字节
+	C int8  1字节
+}
+// 它的内存占用也是24个字节，尽管它只有三个字段，足足浪费了14个字节。
+8个字节: A(int8)  1 + 7个空字节
+8个字节: B(int64) 8
+8个字节: C(int8)  1 + 7个空字节
+
+// 将上述结构体进行调整就可以节省8字节
+type Num struct {
+	A int8
+	C int8
+	B int64
+}
+// 从理论上来说，让结构体中的字段按照合理的顺序分布，可以减少其内存占用。不过实际编码过程中，并没有必要的理由去这样做，它不一定能在减少内存占用这方面带来实质性的提升，但一定会提高开发人员的血压和心智负担，尤其是在业务中一些结构体的字段数可能多大几十个或者数百个，所以仅做了解即可。
+```
+
+## 11.7. 空结构体
+    空结构体没有字段，不占用内存空间，我们可以通过unsafe.SizeOf函数来计算占用的字节大小
+```cgo
+// 空结构体的使用场景有很多，比如之前提到过的，作为map的值类型，可以将map作为set来进行使用，又或者是作为通道的类型，表示仅做通知类型的通道。
+func main() {
+   type Empty struct {}
+   fmt.Println(unsafe.Sizeof(Empty{})) // 0
+}
 ```
