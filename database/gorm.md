@@ -362,4 +362,17 @@ tx := database.DB.Preload("Doctor", func(db *gorm.DB) *gorm.DB {
 }).Order("user_id desc")
 ```
 
+# 4. 数据库查询语句
+    基本格式：
+    `select + 列名（*代表所有的列） from + 表名 + where + 条件语句`
 
+## 4.1. 执行过的命令：
+```cgo
+
+// call表中查找 tag 不为空的
+SELECT * FROM `call` where tag IS NOT NULL AND tag != "";
+
+// 查找指定的 call_id
+SELECT * FROM `call` where call_id = 1734056538.204524;
+
+```
