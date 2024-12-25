@@ -376,3 +376,77 @@ SELECT * FROM `call` where tag IS NOT NULL AND tag != "";
 SELECT * FROM `call` where call_id = 1734056538.204524;
 
 ```
+
+# 5. 标签
+
+## 5.1. gorm库的常见标签
+> primaryKey: 将字段表记为主键         
+> unique: 使字段具有唯一性约束         
+> not null: 字段不允许为空       
+> default:value : 字段默认值             
+```cgo
+package main
+
+import (
+    "fmt"
+    "gorm.io/driver/mysql"
+    "gorm.io/gorm"
+)
+
+type User struct {
+    gorm.Model
+    ID        uint   `gorm:"primaryKey"` // 将 ID 字段标记为主键
+    Name      string `gorm:"not null"`   // 名称字段不允许为空
+    Age       int    `gorm:"default:18"` // 年龄字段默认值为 18
+    Email     string `gorm:"unique"`      // 邮箱字段具有唯一性
+}
+
+func main() {
+    dsn := "your_database_dsn"
+    db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+    if err!= nil {
+        panic("failed to connect database")
+    }
+    defer db.Close()
+
+    // 自动迁移模式创建表
+    db.AutoMigrate(&User{})
+
+    // 创建用户
+    user := User{Name: "John"}
+    db.Create(&user)
+
+    var foundUser User
+    db.First(&foundUser, user.ID)
+    fmt.Println(foundUser)
+}
+```
+
+## 5.2. encoding/json 包的常见标签类型
+> string：强制将字段编码为字符串。            
+> -：在 JSON 编码时忽略该字段     
+```cgo
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+)
+
+type Person struct {
+    Name    string `json:"name"`         // 编码为 JSON 时使用 "name" 作为键
+    Age     int    `json:"age,omitempty"` // 若 Age 为 0 则在 JSON 中省略
+    Address string `json:"-"`            // 编码为 JSON 时忽略该字段
+}
+
+func main() {
+    p1 := Person{Name: "Alice", Age: 25}
+    p2 := Person{Name: "Bob", Age: 0, Address: "Somewhere"}
+
+    jsonData1, _ := json.Marshal(p1)
+    jsonData2, _ := json.Marshal(p2)
+
+    fmt.Println(string(jsonData1)) // {"name":"Alice","age":25}
+	fmt.Println(string(jsonData2)) // {"name":"Bob"}
+}
+```

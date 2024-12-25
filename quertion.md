@@ -1,4 +1,3 @@
-7. 
 
 6. `gorm:"-" json:"Expired,omitempty"`
 
@@ -14,4 +13,27 @@ database.DB.Where("id = ?", s.TemplateId).Take(tem)
 
 id = 0
 database.DB.Table(table).Where("`type`=?", input.Type).Select("id").Take(&id)
+```
+
+2. Preload 不懂
+```cgo
+type row struct {
+		tables.SeatUser
+		Mobile []struct {
+			tables.SeatTel
+		} `gorm:"foreignKey:UserID;references:ID"`
+		Cate []struct {
+			tables.SeatCate
+		} `gorm:"foreignKey:UserID;references:ID"`
+	}
+	rows := make([]row, 0)
+	if len(result) > 0 {
+		database.DB.Table(tables.T_SeatUser).Where("id IN (?)", result).
+			Preload("Mobile").
+			Preload("Cate").
+			Find(&rows)
+		for i := 0; i < len(rows); i++ {
+			rows[i].Card = helper.Anonymous(rows[i].Card, false)
+		}
+	}
 ```
