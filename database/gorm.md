@@ -260,6 +260,24 @@ if row.ID == 0 {
 database.DB.Save(&newData)
 ```
 
+## 2.9. Clauses()
+```cgo
+database.DB.Table(liveRoom).Clauses(clause.Insert{Modifier: "IGNORE"}).Create(&l)
+// 解释：Clauses(clause.Insert{Modifier: "IGNORE"}) 
+// 表示设置插入语句的子句，Modifier: "IGNORE" 
+// 通常用于在执行插入操作时，如果遇到重复的主键或唯一键值，忽略当前插入操作而不报错。
+
+.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "title"}},
+		DoNothing: true,
+	}).Create(&con)
+// 解释：clause.OnConflict 用于处理在执行插入操作时可能出现的冲突情况
+// Columns: []clause.Column{{Name: "title"}} 表示在冲突时，检查 title 列是否冲突
+// DoNothing: true 表示如果发生冲突，则不执行任何操作，直接忽略冲突的记录
+// 这里的 Create(&con) 表示创建 con 对象，并将其插入到数据库中
+
+```
+
 # 3. 构建、执行相关方法
     用于构建和执行复杂的数据库查询操作。
 

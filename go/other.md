@@ -58,3 +58,176 @@ VPN 代理和 IP 代理有以下一些区别：
 - VPN 常用于远程办公、保护隐私、突破地域限制访问特定资源等。
 - IP 代理更多地用于网络爬虫、部分游戏或特定网站的访问需求。
 总之，虽然 VPN 代理和 IP 代理都能在一定程度上改变网络连接的特征，但它们在功能、安全性、合法性和应用场景等方面存在差异。
+
+# 4. 一些常用到的操作
+常用的操作写在此处是为了方便写到类似的函数还要到处找代码浪费时间
+以下代码以家医后台黑名单页面为例
+
+## 4.1. 数据库增删改表
+```cgo
+// 创建表
+CREATE TABLE `blacklist` (
+`mobile` varchar(11) NOT NULL,
+`type` tinyint unsigned NOT NULL DEFAULT '0',
+`adm_id` int unsigned NOT NULL,
+`name` varchar(50) NOT NULL DEFAULT '',
+`card` varchar(18) NOT NULL DEFAULT '',
+`remark` varchar(255) NOT NULL DEFAULT '',
+`created` int unsigned NOT NULL DEFAULT '0',
+PRIMARY KEY (`mobile`)
+) ENGINE=InnoDB;
+
+// 在表里添加某个元素
+AlTER TABLE `adm_user`
+ADD COLUMN `status` tinyint unsigned NOT NULL DEFAULT 1 After `privilege`;
+
+// 在表里删除某个元素
+ALTER TABLE `work_group`
+DROP COLUMN `doctor_message_count`,
+```
+
+## 4.2. 定义表、给表中的数据设置数据结构
+```cgo
+// 黑名单
+const T_BlackList = "blacklist"
+
+const (
+	BlackListType      = iota // 【默认】
+	BlackListTypeDie          // 去世
+	BlackListTypeQuit         // 退订
+	BlackListTypeMove         // 搬迁
+	BlackListTypeOther        // 其他
+)
+
+type BlackList struct {
+	AdmID   uint   // 操作人
+	Type    uint8  // 类型
+	Name    string // 姓名
+	Mobile  string // 手机号 primaryKey
+	Card    string // 身份证号
+	Remark  string // 备注
+	Created int64
+}
+
+func (BlackList) TableName() string {
+	return T_BlackList
+}
+```
+
+## 4.3. 定义增删改查的函数
+```cgo
+// 接口对应的路由
+admData.POST("black", controllers.BlackCreateAdm)
+admData.GET("black", controllers.BlackIndexAdm)
+admData.PUT("black", controllers.BlackUpdateAdm)
+admData.DELETE("black", controllers.BlackDeleteAdm)
+```
+```cgo
+// 新增黑名单用户
+func BlackCreateAdm(c *gin.Context) {
+	input := struct {
+		Mobile string `binding:"required"` // 手机号
+		Type   uint8  `binding:"required"` // 所属类型
+		Name   string // 姓名
+		Card   string // 身份证号
+		Remark string // 备注
+	}{}
+	err := c.ShouldBindJSON(&input)
+	if err != nil {
+		c.AbortWithStatusJSON(UnprocessableEntityHttpResponse(err.Error()))
+		return
+	}
+
+	rec := new(tables.BlackList)
+	database.DB.Table(tables.T_BlackList).Where("mobile = ?", input.Mobile).Take(&rec)
+	if rec.Mobile != "" {
+		c.AbortWithStatusJSON(AccessDeniedHttpResponse("该手机号已存在"))
+		return
+	}
+
+	black := tables.BlackList{
+		AdmID:   GetRequestAdmin(c).ID,
+		Mobile:  input.Mobile,
+		Type:    input.Type,
+		Name:    input.Name,
+		Card:    input.Card,
+		Remark:  input.Remark,
+		Created: time.Now().Unix(),
+	}
+	tx := database.DB.Create(&black)
+	if tx.RowsAffected < 1 {
+		c.AbortWithStatusJSON(AccessDeniedHttpResponse("添加失败"))
+		return
+	}
+}
+
+// 获取黑名单用户
+func BlackIndexAdm(c *gin.Context) {
+	input := struct {
+		Name   string
+		Mobile string
+		Card   string
+		Page   string
+	}{}
+	if err := c.ShouldBindQuery(&input); err != nil {
+		c.AbortWithStatusJSON(UnprocessableEntityHttpResponse(err.Error()))
+		return
+	}
+
+	blackArr := make([]tables.BlackList, 0)
+	tx := database.DB.Table(tables.T_BlackList)
+	if input.Name != "" {
+		tx.Where("name = ?", input.Name)
+	}
+	if input.Mobile != "" {
+		tx.Where("mobile = ?", input.Mobile)
+	}
+	if input.Card != "" {
+		tx.Where("card = ?", input.Card)
+	}
+	tx.Find(&blackArr)
+	// 没有操作日志要返回空数组 故此处不做判空
+	paginate := Paginate(tx, &blackArr, input.Page, 20)
+	c.JSON(http.StatusOK, paginate)
+}
+
+// 修改黑名单用户
+func BlackUpdateAdm(c *gin.Context) {
+	input := struct {
+		Mobile string `binding:"required"` // 手机号
+		Type   uint8  // 所属类型
+		Name   string // 姓名
+		Card   string // 身份证号
+		Remark string // 备注
+	}{}
+	err := c.ShouldBindJSON(&input)
+	if err != nil {
+		c.AbortWithStatusJSON(UnprocessableEntityHttpResponse(err.Error()))
+		return
+	}
+
+	tx := database.DB.Table(tables.T_BlackList).Where("mobile = ?", input.Mobile).Updates(input)
+	if tx.RowsAffected < 1 {
+		c.AbortWithStatusJSON(AccessDeniedHttpResponse("更新失败, 请重试"))
+		return
+	}
+}
+
+// 删除黑名单用户
+func BlackDeleteAdm(c *gin.Context) {
+	input := struct {
+		Mobile string `binding:"required"` // 手机号
+	}{}
+	err := c.ShouldBindJSON(&input)
+	if err != nil {
+		c.AbortWithStatusJSON(UnprocessableEntityHttpResponse(err.Error()))
+		return
+	}
+
+	tx := database.DB.Table(tables.T_BlackList).Where("mobile = ?", input.Mobile).Delete(nil)
+	if tx.RowsAffected < 1 {
+		c.AbortWithStatusJSON(AccessDeniedHttpResponse("黑名单删除失败"))
+		return
+	}
+}
+```
