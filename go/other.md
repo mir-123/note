@@ -231,3 +231,46 @@ func BlackDeleteAdm(c *gin.Context) {
 	}
 }
 ```
+
+# 5. 为什么密码的存储要用到字节
+原因： 因为字符串是不定长的（汉字字符不一定占用多少长度），字节块是定长的
+```cgo
+// 代码
+// 家医服务器
+var input = &struct {
+    Name      string `binding:"required,max=25"`
+    Password  string `binding:"required,min=10,max=50"`
+    Privilege uint64
+}{}
+if err := c.ShouldBindJSON(input); err != nil {
+    c.AbortWithStatusJSON(UnprocessableEntityHttpResponse(err.Error()))
+    return
+}
+
+// 检查密码是否符合要求
+if !checkPassword([]byte(input.Password)) {
+    c.AbortWithStatusJSON(UnprocessableEntityHttpResponse("密码必须至少 10 个字符长，并且同时包含字母和数字"))
+    return
+}
+
+// 检查密码是否包含字母和数字
+func checkPassword(password []byte) bool {
+	hasLetter := false
+	hasDigit := false
+
+	for _, char := range password {
+		if char >= '0' && char <= '9' {
+			hasDigit = true
+		} else if char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' {
+			hasLetter = true
+		}
+	}
+
+	return hasLetter && hasDigit
+}
+```
+
+## 5.1. 字节是最小单元（基本构建块）
+    字节是最小的存储单元，一个字节等于8位，一个位只有0和1两种状态，所以一个字节可以表示256种状态，即0-255，一个字节可以表示一个英文字母，一个汉字占用两个字节，所以一个汉字可以表示256*256种状态，即0-65535，一个汉字占用两个字节，所以一个汉字可以表示256*
+
+

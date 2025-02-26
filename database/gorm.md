@@ -164,7 +164,7 @@ database.DB.Where("user_id = ?", userID).First(ori) // 此处因为 ori本身已
     
 
 ## 2.4. Take()
-    随机获取一条记录，没有指定排序字段
+    随机获取一条记录，没有指定排序字段(其实应该是按顺序查到就返回了，所以相当于First了属于是)
 
 ### 2.4.1. 使用案例
 ```cgo
@@ -180,9 +180,10 @@ database.DB.Where("id = ?", input.ID).Take(ori) // 随机获取匹配条件的�
 
 id = 0
 database.DB.Table(table).Where("`type`=?", input.Type).Select("id").Take(&id)
-// Take 方法需要能够直接修改传递的变量来存储查询到的结果值。
-// 使用指针 &id 可以确保查询得到的值能够正确地被赋值给 id 变量
-// 如果不使用指针，id 变量的值不会被 Take 方法更新，导致判断结果不准确。
+// Take 方法需要能够正确地被赋值给 id 变量
+// 如果不使用指针，id 变量的值不会被 能够直接修改传递的变量来存储查询到的结果值。
+// 使用指针 &id 可以确保查询得到的值Take 方法更新，导致判断结果不准确。
+
 ```
 ### 2.4.2. Take() 和 Find() 的区别
 - 行为：         
@@ -200,6 +201,14 @@ Take() 如果没有找到匹配的记录，会返回一个错误。
 总的来说，如果您只关心匹配条件的第一条记录，使用 Take() ；如果您想要获取所有匹配的记录，使用 Find() 。
 
     以上是网上查找到的解释 我这边总结来说的话呢 Find找到的是个数组对象：[{aa:11},{bb:22}]、Take找到的是个对象：{aa:11}
+
+### 2.4.2. Take()获取指定数目的数据(未验证)
+```cgo
+// 官方举例
+var latestPosts []Post
+db.Model(&Post{}).Order("created_at DESC").Take(10).Find(&latestPosts)
+// 在这个例子中，Order("created_at DESC") 指定了按照创建时间降序排列，而 Take(10) 则限制了查询结果只返回10条记录。
+```
 
 ## 2.5. Last()
     获取最后一条记录（主键降序）
@@ -332,8 +341,8 @@ database.DB.Table(table).Where("`type`=?", input.Type).Select("id").Take(&id)
     用于在查询中添加关联条件，以连接多个表获取相关数据。      
     Joins 方法接受一个字符串参数，用于指定关联的表和关联条件。您可以使用标准的 SQL 风格的关联语法来编写这个字符串。
 
-- JOIN 意味着只返回在连接条件下两个表中相互匹配的行  
-- LEFT JOIN 则会返回左表（即写在 LEFT JOIN 左边的表）中的所有行，即使在右表中没有匹配的行
+- JOIN 意味着只返回在连接条件下两个表中相互匹配的行（两个表中 指定列值相等的行）  
+- LEFT JOIN 则会返回左表（即写在 LEFT JOIN 左边的表）中的所有行（所有数据），即使在右表中没有匹配的行
 ### 3.3.1. 使用案例
 ```cgo
 // 项目中的用法
@@ -341,7 +350,7 @@ database.DB.Table(table).Where("`type`=?", input.Type).Select("id").Take(&id)
 // left join 在这段代码中，uids 切片将会存储从数据库查询中获取的 user_id 字段的值。
 uids := make([]uint, 0)
 database.DB.Table(tables.T_Doctor+" as d").
-    Joins("left join "+tables.T_User+" as u on d.user_id=u.id"). 
+    Joins("left join "+tables.T_User+" as u on d.user_id=u.id").  // 将T_Doctor作为左边的表，返回的将是T_Doctor的所有行
     Where("u.name = ? and d.hospital_id=?", i.DoctorName, hos).
     Select("user_id"). // 指定只选择 user_id 字段
     Limit(2). // 用于限制查询结果返回的行数为 2 行。也就是说，无论数据库中实际有多少匹配的记录，此查询只会返回最多 2 条记录。
@@ -350,7 +359,7 @@ database.DB.Table(tables.T_Doctor+" as d").
 // join 从数据库中查询并统计相关数据，按照特定条件进行连接、分组和字段选择，最终将结果存储在 con 切片中。
 con := make([]count, 0)
 database.DB.Table(tables.T_ResidentContract + " as ctr").
-    Joins("join " + doctor + " as doc on ctr.doctor_id = doc.user_id").
+    Joins("join " + doctor + " as doc on ctr.doctor_id = doc.user_id"). // 只返回这两个表中ctr.doctor_id==doc.user_id的行
     Group("doc.hospital_id"). // 按照 doc.hospital_id 字段对结果进行分组
     Select("doc.hospital_id as id, count(ctr.doctor_id) as cot"). // 选择要返回的字段，将 doc.hospital_id 重命名为 id ，并计算 ctr.doctor_id 的数量并重命名为 cot
     Find(&con)
@@ -359,9 +368,10 @@ database.DB.Table(tables.T_ResidentContract + " as ctr").
 ## 3.4. Preload()
     在查询主模型数据的同时，预先加载关联的模型数据。
     Preload 方法可以接受一个字符串参数来指定要预加载的关联关系名称。
+    目前只能理解Preload比join让人感觉逻辑更清晰这一个优点（多层嵌套）
 ### 3.4.1. 使用案例
 ```cgo
-// 项目中使用案例 
+// 项目中使用案例一： 
 // 在查询主数据时，预先加载关联的 Doctor 数据
 type row struct {
     tables.LiveDoctor
@@ -378,6 +388,34 @@ type row struct {
 tx := database.DB.Preload("Doctor", func(db *gorm.DB) *gorm.DB {
     return db.Table(tables.T_HealthDoctor).Select("user_id,hospital_province,name,hospital,department,title,certificates")
 }).Order("user_id desc")
+
+// 使用案例二：
+// 在查询主数据时，预先加载关联的 Doctor 数据
+type row struct {
+    tables.SeatUser // references:ID 表示这个外键引用了 tables.SeatUser 结构体中的 ID 字段
+    Mobile []struct {
+        tables.SeatTel // foreignKey:UserID 表示在 tables.SeatTel 结构体中，有一个名为 UserID 的字段被定义为外键
+    } `gorm:"foreignKey:UserID;references:ID"`
+    Cate []struct {
+        tables.SeatCate
+    } `gorm:"foreignKey:UserID;references:ID"`
+}
+rows := make([]row, 0)
+if len(result) > 0 {
+    database.DB.Table(tables.T_SeatUser).Where("id IN (?)", result).
+        Preload("Mobile").
+        Preload("Cate").
+        Find(&rows)
+    for i := 0; i < len(rows); i++ {
+        rows[i].Card = helper.Anonymous(rows[i].Card, false)
+    }
+}
+
+// 解释一下foreignKey和references
+// foreignKey:UserID 表示当前模型中的 UserID 字段是外键。
+// references:UserID 表示这个外键引用的是另一个表（通常是 User 表）中的 UserID 字段。
+// 通过这种方式，GORM 能够理解表之间的关联关系，并在进行数据库操作（如查询关联数据、级联删除等）时正确处理这些关系
+
 ```
 
 # 4. 数据库查询语句
@@ -417,6 +455,7 @@ type User struct {
     Name      string `gorm:"not null"`   // 名称字段不允许为空
     Age       int    `gorm:"default:18"` // 年龄字段默认值为 18
     Email     string `gorm:"unique"`      // 邮箱字段具有唯一性
+    ignore    string `gorm:"-"`           // 忽略该字段
 }
 
 func main() {
@@ -453,7 +492,7 @@ import (
 
 type Person struct {
     Name    string `json:"name"`         // 编码为 JSON 时使用 "name" 作为键
-    Age     int    `json:"age,omitempty"` // 若 Age 为 0 则在 JSON 中省略
+    Age     int    `json:"age,omitempty"` // 将Age在json状态下表示为age 为 0 则在 JSON 中省略
     Address string `json:"-"`            // 编码为 JSON 时忽略该字段
 }
 

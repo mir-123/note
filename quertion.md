@@ -1,5 +1,4 @@
 
-6. `gorm:"-" json:"Expired,omitempty"`
 
 7. 搞不懂Take后面的指针到底是咋回事 现在看起来是带上&就没啥问题不带上可能会不对
 
@@ -15,25 +14,12 @@ id = 0
 database.DB.Table(table).Where("`type`=?", input.Type).Select("id").Take(&id)
 ```
 
-2. Preload 不懂
+
+
+2. First()的报错机制
+
 ```cgo
-type row struct {
-		tables.SeatUser
-		Mobile []struct {
-			tables.SeatTel
-		} `gorm:"foreignKey:UserID;references:ID"`
-		Cate []struct {
-			tables.SeatCate
-		} `gorm:"foreignKey:UserID;references:ID"`
-	}
-	rows := make([]row, 0)
-	if len(result) > 0 {
-		database.DB.Table(tables.T_SeatUser).Where("id IN (?)", result).
-			Preload("Mobile").
-			Preload("Cate").
-			Find(&rows)
-		for i := 0; i < len(rows); i++ {
-			rows[i].Card = helper.Anonymous(rows[i].Card, false)
-		}
-	}
+database.DB.Table(tables.T_ExpertUserDetail).Where("user_id = ?", input.UserID).Select("id").Order("id desc").Take(&detailID)
+
+为什么用Take可以 但是用First就会报错
 ```
