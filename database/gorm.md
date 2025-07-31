@@ -161,6 +161,14 @@ type row struct {
 ori := new(row) // new 函数来创建变量时，它返回的就是一个指针
 database.DB.Where("user_id = ?", userID).First(ori) // 此处因为 ori本身已经是个指针了所以就不再需要"&"了
 ```
+### 2.3.2. First() 的报错机制
+    如果没有找到匹配的记录，First() 方法会返回一个错误。您可以通过检查返回的错误来判断是否找到了匹配的记录。
+> First	按 主键升序 返回第一条记录，必须指定排序字段或模型有主键	找不到会 返回 ErrRecordNotFound 错误
+> Take	无顺序要求，直接返回第一条匹配的记录（类似 SQL 的 LIMIT 1）	找不到不报错，返回空结果（detailID 为零值）
+
+First 的底层会追加 ORDER BY primary_key ASC，可能与你的 Order("id desc") 冲突。
+Take 是更纯粹的 LIMIT 1 操作，无隐藏行为。
+
     
 
 ## 2.4. Take()
@@ -507,3 +515,44 @@ func main() {
 	fmt.Println(string(jsonData2)) // {"name":"Bob"}
 }
 ```
+
+## 5.3. `json:"Job,omitempty"`
+```cgo
+// 观察以下代码  有两个部分不明白
+// 1. json:"-"的话 客户端还能传过来ID吗？
+ai:传不过来  测试：确实发送不过来 下面的代码一直报错没有传ID
+// 2. 发散问题 如果传出给客户端的结构中重要信息被加了json:"-"这个标签 客户端能获取到吗？
+ai:获取不到  测试：客户端也确实获取不到 打印出来Json:"-"是undefined
+// 3. Job uint8  `json:"Job,omitempty"`这段代码的作用是什么？为什么加了这段代码 json.Marshal之后如果Job没有值会被忽略
+omitempty中 0值会被忽略
+// 4. `binding:"omitempty"`和 `json:"Job,omitempty"`的区别是什么？
+omitempty中 0值会被忽略
+
+json:"Job,omitempty"：JSON 序列化/反序列化阶段（json.Marshal/Unmarshal）、如果字段为零值，跳过序列化
+
+binding:"omitempty"：
+请求参数验证阶段（ShouldBind 等）、如果字段为零值，跳过 required 验证
+type Input struct { // todo 这个没检验过 后续可以检验一下
+    Job uint8 `binding:"omitempty,required"`  // 如果 Job=0，跳过 required 验证
+}
+// 5. json.Marshal它是什么
+
+func AllUserUpdateAdm(c *gin.Context) {
+	input := struct { // 只有被更改了才需要传过来
+		ID         uint   `binding:"required" json:"-"` // bug json:"-"会直接忽略传过来的ID 也就是 input.ID在序列化时不会被赋值
+		Job        uint8  `json:"Job,omitempty"`        // 身份
+		Rank       uint8  `json:"Rank,omitempty"`       // 职称
+	}{}
+	if err := c.ShouldBindJSON(&input); err != nil { // bug 就是在此处序列化的 input.ID没有值 相当于始终会走入下面的报错
+		c.AbortWithStatusJSON(UnprocessableEntityHttpResponse(err.Error()))
+		return
+	}
+
+	// 把 input json 一下，如果是 {}，说明没有任何更新
+	content, _ := json.Marshal(input)
+	if string(content) == "{}" { // bug 基于上述 此处就不能用空对象判断了，因为打印出来是 {"ID":37}、{"ID":37,"Job":1}所以用都好分割字符串判断数组中元素是否大于2最好
+		c.AbortWithStatusJSON(AccessDeniedHttpResponse("no update"))
+		return
+	}
+}
+```     
